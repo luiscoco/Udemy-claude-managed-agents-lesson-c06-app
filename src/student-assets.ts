@@ -3,6 +3,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 // A fixed allowlist; request paths can never select arbitrary local files.
 const assets: Record<string, [string, string]> = {
+  "/prism.js": ["prism.js", "text/javascript; charset=utf-8"],
+  "/code-highlighting.js": ["code-highlighting.js", "text/javascript; charset=utf-8"],
+  "/code-highlighting.css": ["code-highlighting.css", "text/css; charset=utf-8"],
   "/guide.html": ["guide.html", "text/html; charset=utf-8"],
   "/architecture.html": ["architecture.html", "text/html; charset=utf-8"],
   "/student.css": ["student.css", "text/css; charset=utf-8"],

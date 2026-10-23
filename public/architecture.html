@@ -1,23 +1,29 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>C06 · Sessions and Retained Context</title><link rel="stylesheet" href="/student.css"></head><body><main class="student-shell"><div class="student-brand"><a href="/">How <span>Claude Managed Agents</span> Works</a><span class="student-badge">CONCEPT 06 / 60</span></div><div class="student-hero"><div><div class="student-eyebrow">STUDENT APPLICATION GUIDE</div><h1>Sessions and Retained Context</h1><p>Understand the concepts, follow the source code, and verify the application yourself.</p></div><img src="/astronaut.png" alt=""></div><nav class="student-nav" aria-label="Application sections"><a href="/guide.html#learning">What you will learn</a><a href="/guide.html#run-guide">How to run</a><a href="/architecture.html">Architecture &amp; workflow</a><a href="/#application-lab">Application lab</a><button id="student-theme-toggle" type="button" aria-pressed="false">Switch to dark mode</button></nav><section class="student-section"><h2>Step 0 · Prepare the application before the workflow</h2><p>Use your own Anthropic API key and an existing agent ID and environment ID.</p><p>For the optional live path, set your API key, then run <code>npm run setup</code> if you do not already have resource IDs. The script creates the environment before a text-only agent, saves each ID immediately, and reuses IDs already configured. It uses CLAUDE_MODEL or the source default; choose a model available to your account. An uncertain network failure may have created a resource: inspect your account before retrying. Fixtures work without credentials. Set LIVE_ENABLED=true only when you intend to select the live provider.</p><pre><code>npm ci
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>C06 · Sessions and Retained Context</title><link rel="stylesheet" href="/student.css"><link rel="stylesheet" href="/code-highlighting.css"></head><body><main class="student-shell"><div class="student-brand"><a href="/">How <span>Claude Managed Agents</span> Works</a><span class="student-badge">CONCEPT 06 / 60</span></div><div class="student-hero"><div><div class="student-eyebrow">STUDENT APPLICATION GUIDE</div><h1>Sessions and Retained Context</h1><p>Understand the concepts, follow the source code, and verify the application yourself.</p></div><img src="/astronaut.png" alt=""></div><nav class="student-nav" aria-label="Application sections"><a href="/guide.html#learning">What you will learn</a><a href="/guide.html#run-guide">How to run</a><a href="/architecture.html">Architecture &amp; workflow</a><a href="/#application-lab">Application lab</a><button id="student-theme-toggle" type="button" aria-pressed="false">Switch to dark mode</button></nav><section class="student-section"><h2>Step 0 · Prepare the application before the workflow</h2><p>Use your own Anthropic API key and an existing agent ID and environment ID.</p><p>For the optional live path, set your API key, then run <code>npm run setup</code> if you do not already have resource IDs. The script creates the environment before a text-only agent, saves each ID immediately, and reuses IDs already configured. It uses CLAUDE_MODEL or the source default; choose a model available to your account. An uncertain network failure may have created a resource: inspect your account before retrying. Fixtures work without credentials. Set LIVE_ENABLED=true only when you intend to select the live provider.</p><pre><code class="language-powershell">npm ci
 Copy-Item .env.example .env
-npm start</code></pre><p>Create your local .env from this safe template. The local path needs no remote resources.</p><p class="student-source">Source: .env.example · starting at line 1</p><pre><code>ANTHROPIC_API_KEY=your_api_key
+npm start</code></pre><p>Create your local .env from this safe template. The local path needs no remote resources.</p><p class="student-source">Source: .env.example · starting at line 1</p><pre><code class="language-dotenv">ANTHROPIC_API_KEY=your_api_key
 CLAUDE_MANAGED_AGENT_ID=your_agent_id
 CLAUDE_MANAGED_ENVIRONMENT_ID=your_environment_id
 LIVE_ENABLED=false
-PORT=3006</code></pre><p>Optional prerequisite: create_environment runs before create_agent. Missing IDs are saved in .env; configured IDs are reused. This step is separate from each runtime experiment.</p><p class="student-source">Source: scripts/setup-resources.mts · starting at line 1</p><pre><code>/** Optional one-time provisioning. Reuses IDs already present in .env. */
+PORT=3006</code></pre><p>Optional prerequisite: create_environment runs before create_agent. Missing IDs are saved in .env; configured IDs are reused. This step is separate from each runtime experiment.</p><p class="student-source">Source: scripts/setup-resources.mts · starting at line 1</p><pre><code class="language-typescript">/** Optional one-time provisioning. Reuses IDs already present in .env. */
 import Anthropic from &quot;@anthropic-ai/sdk&quot;;
 import { existsSync, readFileSync, writeFileSync } from &quot;node:fs&quot;;
-if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.startsWith(&quot;your_&quot;)) {
+if (
+  !process.env.ANTHROPIC_API_KEY ||
+  process.env.ANTHROPIC_API_KEY.startsWith(&quot;your_&quot;)
+) {
   throw new Error(&quot;Set your own ANTHROPIC_API_KEY in .env first.&quot;);
 }
 const client = new Anthropic({ maxRetries: 0 });
 let contents = existsSync(&quot;.env&quot;) ? readFileSync(&quot;.env&quot;, &quot;utf8&quot;) : &quot;&quot;;
 function save(key: string, value: string) {
   const pattern = new RegExp(&quot;^\\s*&quot; + key + &quot;=.*$&quot;, &quot;m&quot;);
-  contents = pattern.test(contents) ? contents.replace(pattern, key + &quot;=&quot; + value) : contents.trimEnd() + &quot;\n&quot; + key + &quot;=&quot; + value + &quot;\n&quot;;
+  contents = pattern.test(contents)
+    ? contents.replace(pattern, key + &quot;=&quot; + value)
+    : contents.trimEnd() + &quot;\n&quot; + key + &quot;=&quot; + value + &quot;\n&quot;;
   writeFileSync(&quot;.env&quot;, contents, { mode: 0o600 });
 }
-const valid = (value: string | undefined) =&gt; Boolean(value &amp;&amp; !value.startsWith(&quot;your_&quot;));
+const valid = (value: string | undefined) =&gt;
+  Boolean(value &amp;&amp; !value.startsWith(&quot;your_&quot;));
 if (!valid(process.env.CLAUDE_MANAGED_ENVIRONMENT_ID)) {
   const environment = await client.beta.environments.create({
     name: &quot;C06 student environment&quot;,
@@ -31,16 +37,96 @@ if (!valid(process.env.CLAUDE_MANAGED_AGENT_ID)) {
     name: &quot;C06 text-only student agent&quot;,
     model: process.env.CLAUDE_MODEL || &quot;claude-opus-5-5&quot;,
     system: &quot;Answer the student&#x27;s question clearly and briefly.&quot;,
-    tools: [], mcp_servers: [], skills: [],
+    tools: [],
+    mcp_servers: [],
+    skills: [],
   });
   save(&quot;CLAUDE_MANAGED_AGENT_ID&quot;, agent.id);
 }
-console.log(&quot;Prerequisite IDs are saved in your local .env. Existing configured IDs were reused.&quot;);</code></pre></section><section class="student-section"><h2>UML sequence diagram</h2><p>Read from top to bottom. Columns are participants; arrows are ordered messages. Open the full-size image or scroll horizontally to read every label.</p><p><a href="/architecture.svg" target="_blank" rel="noopener">Open SVG</a> · <a href="/architecture.svg" download>Download SVG</a> · <a href="/architecture.png" download>Download PNG</a></p><div class="student-diagram"><img src="/architecture.svg" alt="UML sequence diagram showing the actual lesson application workflow"></div></section><section class="student-section"><h2>Walk through the application step by step</h2><article class="student-step"><h3>1 · Submit the browser request · part 1</h3><p>The browser sends a same-origin request and updates the visible evidence. It never receives the API key.</p><p class="student-source">Source: public/app.js · starting at line 1</p><pre><code>const $ = s =&gt; document.querySelector(s), button=$(&#x27;#run&#x27;), status=$(&#x27;#status&#x27;);
-fetch(&#x27;/api/config&#x27;).then(r=&gt;r.json()).then(c=&gt;{ if(!c.liveReady) { $(&#x27;#mode option[value=&quot;live&quot;]&#x27;).disabled=true; status.textContent=&#x27;Fixture mode is ready. Configure and enable live mode in .env.&#x27;; } else status.textContent=&#x27;Fixture and live modes are ready.&#x27;; }).catch(()=&gt;{ status.textContent=&#x27;Could not check configuration.&#x27;; button.disabled=true; });
-button.addEventListener(&#x27;click&#x27;, async()=&gt;{ const mode=$(&#x27;#mode&#x27;).value,prompt=$(&#x27;#prompt&#x27;).value.trim(); if(!prompt){status.textContent=&#x27;Enter a prompt.&#x27;;return;} button.disabled=true; $(&#x27;#empty&#x27;).hidden=true; $(&#x27;#result&#x27;).hidden=false; $(&#x27;#events&#x27;).replaceChildren(); $(&#x27;#session&#x27;).textContent=&#x27;—&#x27;; $(&#x27;#outcome&#x27;).textContent=&#x27;Waiting for lifecycle evidence&#x27;; $(&#x27;#source&#x27;).textContent=mode===&#x27;live&#x27;?&#x27;LIVE&#x27;:&#x27;AUTHORED FIXTURE&#x27;; status.textContent=&#x27;Running…&#x27;; let outcome=false, failed=false;
- const handle=f=&gt;{ if(f.type===&#x27;session&#x27;) $(&#x27;#session&#x27;).textContent=f.text; else if(f.type===&#x27;outcome&#x27;){outcome=true;$(&#x27;#outcome&#x27;).textContent=f.text;status.textContent=&#x27;Run finished.&#x27;;} else if(f.type===&#x27;error&#x27;){failed=true;$(&#x27;#outcome&#x27;).textContent=&#x27;Error; completion not confirmed&#x27;;status.textContent=f.text;} else {const li=document.createElement(&#x27;li&#x27;);li.textContent=[f.type,f.text,f.reason].filter(Boolean).join(&#x27; · &#x27;);$(&#x27;#events&#x27;).append(li);} };
- try{const r=await fetch(&#x27;/api/run&#x27;,{method:&#x27;POST&#x27;,headers:{&#x27;Content-Type&#x27;:&#x27;application/json&#x27;},body:JSON.stringify({mode,prompt})});if(!r.ok){const d=await r.json();throw new Error(d.error||&#x27;Request failed&#x27;);}const reader=r.body.getReader(),decoder=new TextDecoder();let pending=&#x27;&#x27;;while(true){const {value,done}=await reader.read();pending+=decoder.decode(value||new Uint8Array(),{stream:!done});const lines=pending.split(&#x27;\n&#x27;);pending=lines.pop();for(const line of lines)if(line)handle(JSON.parse(line));if(done)break;}if(pending.trim())handle(JSON.parse(pending));if(!outcome&amp;&amp;!failed){$(&#x27;#outcome&#x27;).textContent=&#x27;Incomplete&#x27;;status.textContent=&#x27;Stream ended without an outcome.&#x27;;}}catch(e){status.textContent=e.message;$(&#x27;#outcome&#x27;).textContent=&#x27;Error; completion not confirmed&#x27;;}finally{button.disabled=false;}
-});</code></pre></article><article class="student-step"><h3>2 · Execute the provider workflow · part 1</h3><p>The Node host validates input, uses configured resources, and returns observable evidence. Read the stream ordering and failure branches.</p><p class="student-source">Source: src/server.ts · starting at line 1</p><pre><code>import { serveStudentAsset } from &quot;./student-assets&quot;;
+console.log(
+  &quot;Prerequisite IDs are saved in your local .env. Existing configured IDs were reused.&quot;,
+);</code></pre></section><section class="student-section"><h2>UML sequence diagram</h2><p>Read from top to bottom. Columns are participants; arrows are ordered messages. Open the full-size image or scroll horizontally to read every label.</p><p><a href="/architecture.svg" target="_blank" rel="noopener">Open SVG</a> · <a href="/architecture.svg" download>Download SVG</a> · <a href="/architecture.png" download>Download PNG</a></p><div class="student-diagram"><img src="/architecture.svg" alt="UML sequence diagram showing the actual lesson application workflow"></div></section><section class="student-section"><h2>Walk through the application step by step</h2><article class="student-step"><h3>1 · Submit the browser request · part 1</h3><p>The browser sends a same-origin request and updates the visible evidence. It never receives the API key.</p><p class="student-source">Source: public/app.js · starting at line 1</p><pre><code class="language-javascript">const $ = (s) =&gt; document.querySelector(s),
+  button = $(&quot;#run&quot;),
+  status = $(&quot;#status&quot;);
+fetch(&quot;/api/config&quot;)
+  .then((r) =&gt; r.json())
+  .then((c) =&gt; {
+    if (!c.liveReady) {
+      $(&#x27;#mode option[value=&quot;live&quot;]&#x27;).disabled = true;
+      status.textContent =
+        &quot;Fixture mode is ready. Configure and enable live mode in .env.&quot;;
+    } else status.textContent = &quot;Fixture and live modes are ready.&quot;;
+  })
+  .catch(() =&gt; {
+    status.textContent = &quot;Could not check configuration.&quot;;
+    button.disabled = true;
+  });
+button.addEventListener(&quot;click&quot;, async () =&gt; {
+  const mode = $(&quot;#mode&quot;).value,
+    prompt = $(&quot;#prompt&quot;).value.trim();
+  if (!prompt) {
+    status.textContent = &quot;Enter a prompt.&quot;;
+    return;
+  }
+  button.disabled = true;
+  $(&quot;#empty&quot;).hidden = true;
+  $(&quot;#result&quot;).hidden = false;
+  $(&quot;#events&quot;).replaceChildren();
+  $(&quot;#session&quot;).textContent = &quot;—&quot;;
+  $(&quot;#outcome&quot;).textContent = &quot;Waiting for lifecycle evidence&quot;;
+  $(&quot;#source&quot;).textContent = mode === &quot;live&quot; ? &quot;LIVE&quot; : &quot;AUTHORED FIXTURE&quot;;
+  status.textContent = &quot;Running…&quot;;
+  let outcome = false,
+    failed = false;
+  const handle = (f) =&gt; {
+    if (f.type === &quot;session&quot;) $(&quot;#session&quot;).textContent = f.text;
+    else if (f.type === &quot;outcome&quot;) {
+      outcome = true;
+      $(&quot;#outcome&quot;).textContent = f.text;
+      status.textContent = &quot;Run finished.&quot;;
+    } else if (f.type === &quot;error&quot;) {
+      failed = true;
+      $(&quot;#outcome&quot;).textContent = &quot;Error; completion not confirmed&quot;;
+      status.textContent = f.text;
+    } else {
+      const li = document.createElement(&quot;li&quot;);
+      li.textContent = [f.type, f.text, f.reason].filter(Boolean).join(&quot; · &quot;);
+      $(&quot;#events&quot;).append(li);
+    }
+  };
+  try {
+    const r = await fetch(&quot;/api/run&quot;, {
+      method: &quot;POST&quot;,
+      headers: { &quot;Content-Type&quot;: &quot;application/json&quot; },
+      body: JSON.stringify({ mode, prompt }),
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      throw new Error(d.error || &quot;Request failed&quot;);
+    }
+    const reader = r.body.getReader(),
+      decoder = new TextDecoder();
+    let pending = &quot;&quot;;
+    while (true) {
+      const { value, done } = await reader.read();
+      pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = pending.split(&quot;\n&quot;);
+      pending = lines.pop();
+      for (const line of lines) if (line) handle(JSON.parse(line));
+      if (done) break;
+    }
+    if (pending.trim()) handle(JSON.parse(pending));
+    if (!outcome &amp;&amp; !failed) {
+      $(&quot;#outcome&quot;).textContent = &quot;Incomplete&quot;;
+      status.textContent = &quot;Stream ended without an outcome.&quot;;
+    }
+  } catch (e) {
+    status.textContent = e.message;
+    $(&quot;#outcome&quot;).textContent = &quot;Error; completion not confirmed&quot;;
+  } finally {
+    button.disabled = false;
+  }
+});</code></pre></article><article class="student-step"><h3>2 · Execute the provider workflow · part 1</h3><p>The Node host validates input, uses configured resources, and returns observable evidence. Read the stream ordering and failure branches.</p><p class="student-source">Source: src/server.ts · starting at line 1</p><pre><code class="language-typescript">import { serveStudentAsset } from &quot;./student-assets&quot;;
 import http from &quot;node:http&quot;;
 import { readFile } from &quot;node:fs/promises&quot;;
 import { existsSync } from &quot;node:fs&quot;;
@@ -67,25 +153,92 @@ http.createServer(async (req,res) =&gt; {
       res.end(); return;
     }
     const files: Record&lt;string,string&gt;={&quot;/&quot;:&quot;index.html&quot;,&quot;/style.css&quot;:&quot;style.css&quot;,&quot;/app.js&quot;:&quot;app.js&quot;,&quot;/astronaut.png&quot;:&quot;astronaut.png&quot;};
-    if(req.method === &quot;GET&quot; &amp;&amp; req.url &amp;&amp; files[req.url]) { const f=files[req.url]; const data=await readFile(path.join(__dirname,&quot;..&quot;,&quot;public&quot;,f)); res.writeHead(200,{&quot;Content-Type&quot;:f.endsWith(&quot;.png&quot;)?&quot;image/png&quot;:f.endsWith(&quot;.css&quot;)?&quot;text/css&quot;:f.endsWith(&quot;.js&quot;)?&quot;text/javascript&quot;:&quot;text/html; charset=utf-8&quot;}); res.end(data); return; }</code></pre></article><article class="student-step"><h3>2 · Execute the provider workflow · part 2</h3><p>The Node host validates input, uses configured resources, and returns observable evidence. Read the stream ordering and failure branches.</p><p class="student-source">Source: src/server.ts · starting at line 29</p><pre><code>    res.writeHead(404).end(&quot;Not found&quot;);
+    if(req.method === &quot;GET&quot; &amp;&amp; req.url &amp;&amp; files[req.url]) { const f=files[req.url]; const data=await readFile(path.join(__dirname,&quot;..&quot;,&quot;public&quot;,f)); res.writeHead(200,{&quot;Content-Type&quot;:f.endsWith(&quot;.png&quot;)?&quot;image/png&quot;:f.endsWith(&quot;.css&quot;)?&quot;text/css&quot;:f.endsWith(&quot;.js&quot;)?&quot;text/javascript&quot;:&quot;text/html; charset=utf-8&quot;}); res.end(data); return; }</code></pre></article><article class="student-step"><h3>2 · Execute the provider workflow · part 2</h3><p>The Node host validates input, uses configured resources, and returns observable evidence. Read the stream ordering and failure branches.</p><p class="student-source">Source: src/server.ts · starting at line 29</p><pre><code class="language-typescript">    res.writeHead(404).end(&quot;Not found&quot;);
   } catch(error) { res.writeHead(400,{&quot;Content-Type&quot;:&quot;application/json&quot;}); res.end(JSON.stringify({error:error instanceof Error ? error.message : &quot;Request failed&quot;})); }
-}).listen(port,&quot;127.0.0.1&quot;,()=&gt;console.log(`Open http://127.0.0.1:${port}`));</code></pre></article><article class="student-step"><h3>3 · Understand the lesson-specific rules · part 1</h3><p>Offers authored completed/incomplete fixtures and an explicitly enabled real provider path. Each run creates a new session; the sample does not offer a multi-turn resume UI.</p><p class="student-source">Source: src/runner.ts · starting at line 1</p><pre><code>import Anthropic from &quot;@anthropic-ai/sdk&quot;;
+}).listen(port,&quot;127.0.0.1&quot;,()=&gt;console.log(`Open http://127.0.0.1:${port}`));</code></pre></article><article class="student-step"><h3>3 · Understand the lesson-specific rules · part 1</h3><p>Offers authored completed/incomplete fixtures and an explicitly enabled real provider path. Each run creates a new session; the sample does not offer a multi-turn resume UI.</p><p class="student-source">Source: src/runner.ts · starting at line 1</p><pre><code class="language-typescript">import Anthropic from &quot;@anthropic-ai/sdk&quot;;
 export type Frame = { type: string; text?: string; reason?: string };
-export interface Provider { source: &quot;fixture&quot; | &quot;live&quot;; create(): Promise&lt;string&gt;; open(id: string): Promise&lt;AsyncIterable&lt;Frame&gt;&gt;; send(id: string, prompt: string): Promise&lt;void&gt;; }
+export interface Provider {
+  source: &quot;fixture&quot; | &quot;live&quot;;
+  create(): Promise&lt;string&gt;;
+  open(id: string): Promise&lt;AsyncIterable&lt;Frame&gt;&gt;;
+  send(id: string, prompt: string): Promise&lt;void&gt;;
+}
 export function fixture(incomplete = false): Provider {
-  return { source: &quot;fixture&quot;, async create() { return &quot;fixture-session&quot;; }, async open() { return (async function* () { yield { type: &quot;running&quot; }; yield { type: &quot;message&quot;, text: &quot;This is an authored example, not a live model response.&quot; }; if (!incomplete) yield { type: &quot;idle&quot;, reason: &quot;end_turn&quot; }; })(); }, async send() {} };
+  return {
+    source: &quot;fixture&quot;,
+    async create() {
+      return &quot;fixture-session&quot;;
+    },
+    async open() {
+      return (async function* () {
+        yield { type: &quot;running&quot; };
+        yield {
+          type: &quot;message&quot;,
+          text: &quot;This is an authored example, not a live model response.&quot;,
+        };
+        if (!incomplete) yield { type: &quot;idle&quot;, reason: &quot;end_turn&quot; };
+      })();
+    },
+    async send() {},
+  };
 }
 export function live(client: Anthropic, agent: string, environment: string): Provider {
   let stream: Awaited&lt;ReturnType&lt;typeof client.beta.sessions.events.stream&gt;&gt;;
-  return { source: &quot;live&quot;, async create() { const session = await client.beta.sessions.create({ agent, environment_id: environment, budget: { type: &quot;limit&quot;, max_list_cost: { amount: &quot;50&quot;, currency: &quot;USD&quot; } } }); return session.id; },
-    async open(id) { stream = await client.beta.sessions.events.stream(id); return (async function* () { for await (const event of stream) { if (event.type === &quot;agent.message&quot;) { for (const block of event.content) if (block.type === &quot;text&quot;) yield { type: &quot;message&quot;, text: block.text }; } else if (event.type === &quot;session.status_idle&quot;) { yield { type: &quot;idle&quot;, reason: event.stop_reason.type }; break; } else if (event.type === &quot;session.status_terminated&quot;) { yield { type: &quot;terminated&quot; }; break; } else if (event.type === &quot;session.error&quot;) { yield { type: &quot;error&quot;, text: &quot;Provider reported a session error.&quot; }; break; } else yield { type: event.type }; } })(); },
-    async send(id, prompt) { await client.beta.sessions.events.send(id, { events: [{ type: &quot;user.message&quot;, content: [{ type: &quot;text&quot;, text: prompt }] }] }); } };
+  return {
+    source: &quot;live&quot;,
+    async create() {
+      const session = await client.beta.sessions.create({
+        agent,
+        environment_id: environment,
+        budget: { type: &quot;limit&quot;, max_list_cost: { amount: &quot;50&quot;, currency: &quot;USD&quot; } },
+      });
+      return session.id;
+    },
+    async open(id) {
+      stream = await client.beta.sessions.events.stream(id);
+      return (async function* () {
+        for await (const event of stream) {
+          if (event.type === &quot;agent.message&quot;) {
+            for (const block of event.content)
+              if (block.type === &quot;text&quot;) yield { type: &quot;message&quot;, text: block.text };
+          } else if (event.type === &quot;session.status_idle&quot;) {
+            yield { type: &quot;idle&quot;, reason: event.stop_reason.type };
+            break;
+          } else if (event.type === &quot;session.status_terminated&quot;) {
+            yield { type: &quot;terminated&quot; };
+            break;
+          } else if (event.type === &quot;session.error&quot;) {
+            yield { type: &quot;error&quot;, text: &quot;Provider reported a session error.&quot; };
+            break;
+          } else yield { type: event.type };
+        }
+      })();
+    },
+    async send(id, prompt) {
+      await client.beta.sessions.events.send(id, {
+        events: [{ type: &quot;user.message&quot;, content: [{ type: &quot;text&quot;, text: prompt }] }],
+      });
+    },
+  };
 }
-export async function run(provider: Provider, prompt: string, emit: (frame: Frame &amp; { source: string }) =&gt; void) {
+export async function run(
+  provider: Provider,
+  prompt: string,
+  emit: (frame: Frame &amp; { source: string }) =&gt; void,
+) {
   const send = (frame: Frame) =&gt; emit({ ...frame, source: provider.source });
-  const id = await provider.create(); send({ type: &quot;session&quot;, text: id });
-  const stream = await provider.open(id); await provider.send(id, prompt);
+  const id = await provider.create();
+  send({ type: &quot;session&quot;, text: id });
+  const stream = await provider.open(id);
+  await provider.send(id, prompt);
   let outcome = &quot;incomplete&quot;;
-  for await (const frame of stream) { send(frame); if (frame.type === &quot;idle&quot;) outcome = frame.reason === &quot;end_turn&quot; ? &quot;completed&quot; : `paused: ${frame.reason}`; else if (frame.type === &quot;terminated&quot;) outcome = &quot;terminated&quot;; else if (frame.type === &quot;error&quot;) outcome = &quot;error&quot;; }
-  send({ type: &quot;outcome&quot;, text: outcome }); return outcome;
-}</code></pre></article></section><section class="student-section"><h2>What the evidence proves</h2><p class="student-note">Offers authored completed/incomplete fixtures and an explicitly enabled real provider path. Each run creates a new session; the sample does not offer a multi-turn resume UI.</p><p>Check the displayed outcome and source together. A rendered answer alone does not prove that a tool ran, a remote operation succeeded, or work was cancelled.</p></section><footer>LESSON C06 · LEARN → CONFIGURE → RUN → VERIFY<p><a href="/guide.html#learning">Learning goals</a> · <a href="/guide.html#run-guide">Run instructions</a> · <a href="/architecture.html">Workflow</a> · <a href="/#application-lab">Lab</a></p></footer></main><script src="/navigation.js"></script></body></html>
+  for await (const frame of stream) {
+    send(frame);
+    if (frame.type === &quot;idle&quot;)
+      outcome = frame.reason === &quot;end_turn&quot; ? &quot;completed&quot; : `paused: ${frame.reason}`;
+    else if (frame.type === &quot;terminated&quot;) outcome = &quot;terminated&quot;;
+    else if (frame.type === &quot;error&quot;) outcome = &quot;error&quot;;
+  }
+  send({ type: &quot;outcome&quot;, text: outcome });
+  return outcome;
+}</code></pre></article></section><section class="student-section"><h2>What the evidence proves</h2><p class="student-note">Offers authored completed/incomplete fixtures and an explicitly enabled real provider path. Each run creates a new session; the sample does not offer a multi-turn resume UI.</p><p>Check the displayed outcome and source together. A rendered answer alone does not prove that a tool ran, a remote operation succeeded, or work was cancelled.</p></section><footer>LESSON C06 · LEARN → CONFIGURE → RUN → VERIFY<p><a href="/guide.html#learning">Learning goals</a> · <a href="/guide.html#run-guide">Run instructions</a> · <a href="/architecture.html">Workflow</a> · <a href="/#application-lab">Lab</a></p></footer></main><script src="/navigation.js"></script><script defer src="/prism.js"></script><script defer src="/code-highlighting.js"></script></body></html>

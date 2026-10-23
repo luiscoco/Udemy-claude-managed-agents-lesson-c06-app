@@ -43,12 +43,6 @@ LIVE_ENABLED=false
 PORT=3006
 ```
 
-The snapshot below uses the current local file's variable names. Every non-PORT value, including IDs, is redacted **before** rendering the image.
-
-![Sanitized local .env configuration](docs/images/env-redacted.png)
-
-Regenerate it locally with `python scripts/capture-env-example.py` after installing Python Playwright and its Chromium browser. This optional documentation tool is not needed to run the app.
-
 ## How the application was developed
 
 The browser collects inputs; the Node host validates requests; the lesson implementation produces observable evidence. The architecture page walks through the real source with numbered steps, prerequisite configuration, source filenames and code excerpts.
