@@ -43,38 +43,77 @@ LIVE_ENABLED=false
 PORT=3006
 ```
 
-## How the application was developed
+## How the app was build
 
-The browser collects inputs; the Node host validates requests; the lesson implementation produces observable evidence. The architecture page walks through the real source with numbered steps, prerequisite configuration, source filenames and code excerpts.
+### 1. Put the provider behind a small interface
 
-### Lesson implementation
+The runner depends on create, open and send plus an explicit source label. The interface lets authored fixtures exercise the same consumer contract as the live adapter.
 
-[src/runner.ts](https://github.com/luiscoco/Udemy-claude-managed-agents-lesson-c06-app/blob/main/src/runner.ts)
+Source: [src/runner.ts](src/runner.ts#L3)
 
 ```typescript
-import Anthropic from "@anthropic-ai/sdk";
-export type Frame = { type: string; text?: string; reason?: string };
-export interface Provider { source: "fixture" | "live"; create(): Promise<string>; open(id: string): Promise<AsyncIterable<Frame>>; send(id: string, prompt: string): Promise<void>; }
-export function fixture(incomplete = false): Provider {
-  return { source: "fixture", async create() { return "fixture-session"; }, async open() { return (async function* () { yield { type: "running" }; yield { type: "message", text: "This is an authored example, not a live model response." }; if (!incomplete) yield { type: "idle", reason: "end_turn" }; })(); }, async send() {} };
-}
-export function live(client: Anthropic, agent: string, environment: string): Provider {
-  let stream: Awaited<ReturnType<typeof client.beta.sessions.events.stream>>;
-  return { source: "live", async create() { const session = await client.beta.sessions.create({ agent, environment_id: environment, budget: { type: "limit", max_list_cost: { amount: "50", currency: "USD" } } }); return session.id; },
-    async open(id) { stream = await client.beta.sessions.events.stream(id); return (async function* () { for await (const event of stream) { if (event.type === "agent.message") { for (const block of event.content) if (block.type === "text") yield { type: "message", text: block.text }; } else if (event.type === "session.status_idle") { yield { type: "idle", reason: event.stop_reason.type }; break; } else if (event.type === "session.status_terminated") { yield { type: "terminated" }; break; } else if (event.type === "session.error") { yield { type: "error", text: "Provider reported a session error." }; break; } else yield { type: event.type }; } })(); },
-    async send(id, prompt) { await client.beta.sessions.events.send(id, { events: [{ type: "user.message", content: [{ type: "text", text: prompt }] }] }); } };
-}
-export async function run(provider: Provider, prompt: string, emit: (frame: Frame & { source: string }) => void) {
-  const send = (frame: Frame) => emit({ ...frame, source: provider.source });
-  const id = await provider.create(); send({ type: "session", text: id });
-  const stream = await provider.open(id); await provider.send(id, prompt);
-  let outcome = "incomplete";
-  for await (const frame of stream) { send(frame); if (frame.type === "idle") outcome = frame.reason === "end_turn" ? "completed" : `paused: ${frame.reason}`; else if (frame.type === "terminated") outcome = "terminated"; else if (frame.type === "error") outcome = "error"; }
-  send({ type: "outcome", text: outcome }); return outcome;
+export interface Provider {
+  source: "fixture" | "live";
+  create(): Promise<string>;
+  open(id: string): Promise<AsyncIterable<Frame>>;
+  send(id: string, prompt: string): Promise<void>;
 }
 ```
 
-Read the architecture page for the remaining source excerpts and explanations, including input handling and optional provider behavior. The diagram describes this application, rather than implying that an external integration has been implemented.
+### 2. Make fixture completion deliberate
+
+The fixture yields authored running and message frames. The incomplete variant omits idle/end_turn, so a plausible answer cannot make the run completed.
+
+Source: [src/runner.ts](src/runner.ts#L4)
+
+```typescript
+export function fixture(incomplete = false): Provider {
+  return {
+    source: "fixture",
+    async create() {
+      return "fixture-session";
+    },
+    async open() {
+      return (async function* () {
+        yield { type: "running" };
+        yield {
+          type: "message",
+          text: "This is an authored example, not a live model response.",
+        };
+        if (!incomplete) yield { type: "idle", reason: "end_turn" };
+      })();
+    },
+    async send() {},
+  };
+}
+```
+
+### 3. Create, observe, then send in one runner
+
+The shared runner opens observation before sending and starts at incomplete. It promotes that state only from lifecycle evidence, retaining source labels on emitted frames.
+
+Source: [src/runner.ts](src/runner.ts#L15) · selected statements
+
+```typescript
+const id = await provider.create();
+
+// ... other source statements omitted ...
+const stream = await provider.open(id);
+
+await provider.send(id, prompt);
+
+// ... other source statements omitted ...
+let outcome = "incomplete";
+
+// ... other source statements omitted ...
+for await (const frame of stream) {
+  send(frame);
+  if (frame.type === "idle")
+    outcome = frame.reason === "end_turn" ? "completed" : `paused: ${frame.reason}`;
+  else if (frame.type === "terminated") outcome = "terminated";
+  else if (frame.type === "error") outcome = "error";
+}
+```
 
 ## Validation
 
