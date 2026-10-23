@@ -1,0 +1,22 @@
+{
+  "name": "lesson-c06-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/server.js",
+    "test": "npm run build && node dist/runner.test.js",
+    "dev": "npm run build && node dist/server.js",
+    "setup": "node --env-file-if-exists=.env scripts/setup-resources.mts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.135.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
